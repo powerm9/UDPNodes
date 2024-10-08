@@ -16,8 +16,11 @@ print_lock = threading.Lock()  # Lock for thread-safe printing
 init_timestmp = 0
 connect_timestmp = 0
 rtt = 0
+chatprint = False
 
-
+# broadcast_port = 6000
+# listen_port = 5000
+# broadcast_address = '255.255.255.255'
 
 
 def thread_start():
@@ -64,12 +67,33 @@ class Supplier:
         self.connection = connection
         self.rtt = rtt
 
+def send_msg(address, port, name, usermessage):
+    msg = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    msg.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+
+    message = f"CHAT {name} {usermessage}"
+    try:
+        msg.sendto(message.encode(), (address, port))
+    finally:
+        msg.close()
+
+def alive_socket(broadcast_port):
+    alive_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    print("alive socket started")
+    while True:
+        print("alive socket")
+        if len(suppliers_list) > 0:
+            for supplier in suppliers_list:
+                messageALIVE = f"ALIVE"
+                ip = supplier.ip_address
+                print("alive sent")
+                alive_socket.sendto(messageALIVE.encode(), (ip, broadcast_port))
 
 
 def broadcast_socket(broadcast_address, broadcast_port):
     broadcast_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     broadcast_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-
     while broadcasting == False:
         global init_timestmp
         message = f"PIZZA"
@@ -77,12 +101,7 @@ def broadcast_socket(broadcast_address, broadcast_port):
         # print_pizza()
         # print("sent pizza")
         init_timestmp = time.time()
-        time.sleep(5)
-         
-        for supplier in suppliers_list:
-            messageALIVE = f"ALIVE"
-            ip = supplier.ip_address
-            broadcast_socket.sendto(messageALIVE.encode(), (ip, broadcast_port))
+        time.sleep(1)
 
     broadcast_socket.shutdown(socket.SHUT_RDWR)
     broadcast_socket.close
@@ -124,6 +143,7 @@ def listen_socket(discovery_port, listen_port, my_details):
             for supplier in suppliers_list:
                 supplier.connection = 0  # Set all connections to 0 initially
             for supplier in suppliers_list:
+                print(supplier)
                 if supplier.ip_address == ip_address:
                     supplier.name = name
                     supplier.ip_address = ip_address
@@ -132,12 +152,25 @@ def listen_socket(discovery_port, listen_port, my_details):
                     supplier.quantity = quantity
                     supplier.connection = 1  # Set connection to 1 for the supplier with the matching IP
                     menu_printer(my_details)
-                    break        
+                    break  
+
+        if message.startswith("CHAT"):
+            _, name, *chatmsg = message.split()
+            chatmsg = ' '.join(chatmsg)
+            if chatprint == True:
+                print(f'[{name}]: {chatmsg}')
+                
+            
+            
+
+
+            
+
 
         # if message.startswith("YES"):
         #     _, name, ip_address, ingredient, quality, quantity = message.split()
 
-        time.sleep(1)
+        # time.sleep(1)
         
 
 
@@ -225,40 +258,48 @@ def negotiate(requested_ingredient, requested_quantity, requested_quality):
     # Turn requested ingredient into an int
 
     if my_details['ingredient'] == requested_ingredient and my_details['quantity'] >= requested_quantity and my_details['quality'] == requested_quality:
-        print("Enough self ingredient to be able to send")
-        print(my_details['quantity'])
         my_details['quantity'] = (my_details['quantity']) - requested_quantity
         # display_quantity  = int(self.quantity) - int(requested_quantity)  # Deduct the quantity
         # self.quantity = display_quantity
         
-        print(f"NEGOTIATION REQUEST ACCEPTED")
-        return True, "ACCEPTED. My remaining quantity:", my_details['quantity']
-    print(f"NEGOTIATION REQUEST REJECTED")
-    return False, "REJECTED", None
+
+        return f"Accepted. Their remaining quantity: {my_details['quantity']} {requested_quantity}"
+    return f"Rejected, they want: {requested_quantity}, you only have: {my_details['quantity']} "
 
 
 
 def listen_for_negotiation_requests(port):
     negotiation_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     negotiation_socket.bind(('0.0.0.0', port))
+    global updatequantity
     while True:
         data, sender_address = negotiation_socket.recvfrom(1024)
         message = data.decode()
-        print(message)
+
         if message.startswith("NEGOTIATE"):
             _, ingredient, quantity, quality = message.split()
             for supplier in suppliers_list:
-                if supplier.ip_address == sender_address[0]:  # Avoid self-negotiation
-                    continue
-                accepted, response, new_quantity = negotiate(ingredient, int(quantity), quality)
-                response_message = f"NEGOTIATION RESPONSE: {response} {new_quantity if new_quantity else ''}"
+                # if supplier.ip_address == sender_address[0]:  # Avoid self-negotiation
+                #     continue
+                response = negotiate(ingredient, int(quantity), quality)
+                response_message = f"Negotiation {response} "
                 negotiation_socket.sendto(response_message.encode(), (sender_address[0], port))
-                break  # Assuming one supplier per IP for simplicity
+                # Assuming one supplier per IP for simplicity
+            
+        if message.startswith("Negotiation Accepted."):
+            words = message.split()
+            updatequantity = ' '.join(words[6:])
+            updatequantity = int(updatequantity)
+            first_words = ' '.join(words[:6])
+            my_details['quantity'] += updatequantity
+            menu_printer(my_details)
+            # time.sleep(1)
+            print_node_list(suppliers_list)
+            print(first_words)
 
-
-
-
-
+        if message.startswith("Rejected"):
+            print(message)
+            
 
 def negotiating(negotiation_port):
     global negotiate_socket
@@ -267,7 +308,7 @@ def negotiating(negotiation_port):
 
     try: 
         while True:
-            name = input("\nName: ").strip()
+            name = input("\nName: ")
             quantity = int(input("Quantity: ").strip())
             
             for supplier in suppliers_list:
@@ -278,8 +319,7 @@ def negotiating(negotiation_port):
                 
             # Assuming the negotiation port is known and fixed for simplicity
             message = f"NEGOTIATE {ingredient} {quantity} {quality}"
-            print("Message sent")
-            negotiate_socket.sendto(message.encode(), (target_ip, negotiation_port, ingredient, quantity, quality))
+            negotiate_socket.sendto(message.encode(), (target_ip, negotiation_port))
             break
     except KeyboardInterrupt:
         menu_printer(my_details)
@@ -322,6 +362,7 @@ def show_nodes():
     global menu
     menu = False
     menu_printer(my_details)
+
     thread_start()
     try: 
         
@@ -352,6 +393,30 @@ def negotiate_nodes():
         negotiate_socket.close()
         menu = True
         # menu_printer(my_details)
+def chat(address, port):
+    global menu, chatprint
+    menu = False
+    chatprint = True
+    name = my_details['name']
+    try:
+        menu_printer(my_details)
+        usermessage = "has joined the chat"
+        print("Welcome to the chat, enter input:")
+        send_msg(address, port, name, usermessage)
+        while True:
+
+            usermessage = input("")
+            send_msg(address, port, name, usermessage)
+    except: KeyboardInterrupt
+
+    try:
+        menu_printer
+        chatprint = True
+        while True:
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+            chatprint = False
+            menu = True
 
 # def print_targets():
 
