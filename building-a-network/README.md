@@ -1,14 +1,16 @@
 # Building a Network
 
+## Functionality
 
-#Functionality
-Once you run this ndoe on your PC it will determine your IP and begin broadcasting on all IP's on your local network.
-If another Node or Nodes are running they will then begin communicating. In the menu you can see these other nodes and what "items" they have to offer.
-These items can be traded and you will see the outcome updated in the respective tables.
+Once you run this code on your PC, it will determine your IP address and begin broadcasting on all IPs on your local network. If other nodes are running, they will start communicating with each other.
 
-You can also chat with the other nodes!
+### Key Features:
+- **Node Discovery**: View other nodes in the network and see what "items" they have to offer.
+- **Trading System**: Items can be traded, and the outcomes will be updated in the respective tables.
+- **Chat Functionality**: Communicate with other nodes in real-time!
 
-Matthew Power
-Maria Meshcheryakova
-Sarah Maduwuba
-Isabel Ryan
+### Nodes:
+- **Matthew Power**
+- **Maria Meshcheryakova**
+- **Sarah Maduwuba**
+- **Isabel Ryan**
